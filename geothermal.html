@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>Geothermal Design Challenge</title>
+    
+    <!-- Using the light theme: https://developers.arcgis.com/javascript/latest/guide/styling/ -->
+    <link rel="stylesheet" href="https://js.arcgis.com/4.14/esri/themes/dark-red/main.css"> 
+    <script src="https://js.arcgis.com/4.14/"></script>
+
+    <script>
+        require([
+            "esri/Map",
+            "esri/views/MapView",
+            "esri/widgets/Search",
+            "esri/widgets/Home",
+            "esri/widgets/TimeSlider",
+            "esri/layers/FeatureLayer",
+            "esri/widgets/Legend",
+            "esri/widgets/Expand",
+            "esri/widgets/LayerList"
+          ], function(
+              Map, 
+              MapView, 
+              Search,
+              Home, 
+              TimeSlider, 
+              FeatureLayer,
+              Legend,
+              Expand,
+              LayerList
+            ) {
+
+        // Configures clustering on the layer. This code must come before the featureReduction property.
+        const clusterConfig = {
+          type: "cluster",
+          clusterRadius: "50px", // Indicates an area comprising screen space 50px from the center of the cluster
+          // {cluster_count} is an aggregate field containing the number of features comprised by the cluster
+          popupTemplate: {
+            content: "This cluster represents {cluster_count} submissions to the Geothermal Data Repository."
+          }
+        };
+
+        // Basemap
+        var map = new Map({
+            basemap: "dark-gray"
+          });
+      
+        // Map div
+        var view = new MapView({
+            container: "viewDiv",
+            map: map,
+            center: [-110.5795, 37.8283], // longitude, latitude
+            zoom: 4,
+            ui: {
+            components: ["attribution"] // removes the +/- zoom widget
+            }
+        });
+
+        // Create a Search widget
+        const searchWidget = new Search({
+            view: view
+        });
+        
+        // Adds the search widget below other elements in the top left corner of the view
+        view.ui.add(searchWidget, {
+        position: "top-right",
+        index: 2
+        });
+
+        // Create a home widget
+        var homeWidget = new Home({
+            view: view
+        });
+
+        // adds the home widget to the top left corner of the MapView
+        view.ui.add(homeWidget, "top-right");
+
+        
+        // Create a TimeSlider
+        var timeSlider = new TimeSlider({
+            container: "timeSliderDiv",
+            view: view, // set the TimeSlider's view property.
+            mode: "time-window",
+            fullTimeExtent: { // entire extent of the timeSlider
+                start: new Date(2012, 0, 1), // year,month starting from 0, day
+                end: new Date(2020, 2, 1)
+                },
+            values:[ // location of timeSlider thumbs
+                new Date(2012, 0, 1),
+                new Date(2020, 2, 1)
+            ]
+        });
+        
+        // Adds the time slider widget in the bottom left corner of the view
+        view.ui.add(timeSlider, {
+            position: "bottom-left"
+        });
+
+        // Create a PopupTemplate for GDR submissions
+        var featurePopup = {
+            title: "{submission_name}", 
+            content: [
+                {
+                    type: "fields",
+                    fieldInfos: [
+                        {
+                            fieldName: "url",
+                            label: "Submission URL"
+                        },
+                        {
+                            fieldName: "status",
+                            label: "Availability Status"
+                        },
+                        {
+                            fieldName: "resource_name",
+                            label: "Resource Name"
+                        },
+                        {
+                            fieldName: "created_date",
+                            label: "Date Submitted"
+                        }
+                        ]
+                }]
+            }
+
+        // Create a PopupTemplate for EGS potential
+        var egsPopup = {
+            title: "Enhanced Geothermal Potential Rating", 
+            content: "This region is rated <strong>{class}</strong> for EGS potential. <br><br>Ratings reflect EGS favorability with 1 being most favorable 5 being least favorable and 999 not having been assessed due to temperatures less than 150 degrees C at 10 km depth."
+            }
+
+        // Call Feature Layer Service from ArcGIS Online and add featureLayers to the map. Listed in drawing order.
+        
+        // EGS potential feature layer (polygons)
+        var potentialLayer = new FeatureLayer({
+            title: "Enhanced Geothermal Potential",
+            url: "https://services5.arcgis.com/njRHYVhl2CMXMsap/arcgis/rest/services/EGS_Favorability/FeatureServer",
+            opacity: 0.5, // makes the layer 50% transparent
+            legendEnabled: false,
+            popupTemplate: egsPopup, // enable popupTemplate on this layer
+
+            });
+
+        map.add(potentialLayer); 
+
+        // Submissions feature layer (points)
+        var featureLayer = new FeatureLayer({
+            title: "Geothermal Data Repository Submissions",
+            url: "https://services5.arcgis.com/njRHYVhl2CMXMsap/arcgis/rest/services/Geothermal_Design_Challenge/FeatureServer",
+            listMode: "hide", // do not show this layer in the LayerList; not available to toggle
+            outFields:["*"], // return all fields in this layer
+            popupTemplate: featurePopup, // enable popupTemplate on this layer
+            featureReduction: clusterConfig // defined above
+        });
+
+        map.add(featureLayer);
+
+        // US hex grid feature layer (polygons)
+        var hexLayer = new FeatureLayer({
+            url: "https://services5.arcgis.com/njRHYVhl2CMXMsap/arcgis/rest/services/US_hex_grid/FeatureServer",
+            legendEnabled: false // removes this layer from the legend
+        });
+
+        map.add(hexLayer);
+
+
+        // Create a layer list widget
+        var layerList = new LayerList({
+            view: view,
+                // executes for each ListItem in the LayerList
+                listItemCreatedFunction: function (event) {
+
+                var item = event.item;  // The event object contains properties of the layer in the LayerList widget
+
+                if (item.title === "US hex grid") {
+                    item.title = "High Potential Areas for Research"; // change the title
+                    item.visible = false; // default to not visible when opening the app
+                    }
+                if (item.title === "Enhanced Geothermal Potential"){
+                    item.visible = false;
+                }
+                }
+            });
+
+        // Adds widget below other elements in the top left corner of the view
+        view.ui.add(layerList, {
+        position: "top-left"
+        });      
+        
+
+        
+        // Create point clustering on featureLayer, with an enable/disable function
+    
+        // Create legend
+        const legend = new Legend({
+            view: view,
+            container: "legendDiv"
+            });
+
+
+        // // DEPRECATED_Configure expansion
+        // const infoDiv = document.getElementById("infoDiv");
+        //     view.ui.add(
+        //     new Expand({
+        //         view: view,
+        //         content: infoDiv,
+        //         expandIconClass: "esri-icon-layer-list",
+        //         expanded: false
+        //         }),
+        //         "top-left"
+        //         );
+
+        
+        // To turn off clustering on a layer, set the featureReduction property to null
+        const toggleButton = document.getElementById("cluster");
+
+            toggleButton.addEventListener("click", function() {
+                let fr = featureLayer.featureReduction;
+            featureLayer.featureReduction =
+                fr && fr.type === "cluster" ? null : clusterConfig;
+            toggleButton.innerText =
+                toggleButton.innerText === 
+                "Enable Clustering"
+                ? "Disable Clustering" 
+                : "Enable Clustering";
+            });
+
+        // Add legend to the bottom right corner of the view
+          view.ui.add(legend, "top-left");
+
+        
+        // Create a UI element with filter expressions. 
+        var sqlExpressions = [
+            "status IS NOT NULL", // returns all data
+            "status = 'Publicly accessible'",
+            "direct_use = 'TRUE'",
+            "egs = 'TRUE'",
+            "forge = 'TRUE'",
+            "hydrothermal = 'TRUE'"
+        ];
+
+        var selectFilter = document.createElement("select");
+            selectFilter.setAttribute("class", "esri-widget esri-select");
+            selectFilter.setAttribute("style", " width: 300px; font-family: Avenir Next W00; font-size: 1em;");
+            sqlExpressions.forEach(function(sql){
+                var option = document.createElement("option");
+                    option.value = sql;
+                    option.innerHTML = sql;
+                        if (sql === "status IS NOT NULL") { // change label of sql expressions
+                            option.innerHTML = "All Submissions"
+                        }
+                        if (sql === "status = 'Publicly accessible'") {
+                            option.innerHTML = "Publicly Accessible"
+                        }
+                        if (sql === "direct_use = 'TRUE'") {
+                            option.innerHTML = "Direct Use"
+                        }
+                        if (sql === "egs = 'TRUE'") {
+                            option.innerHTML = "Enhanced Geothermal Systems"
+                        }
+                        if (sql === "forge = 'TRUE'") {
+                            option.innerHTML = "FORGE"
+                        }
+                        if (sql === "hydrothermal = 'TRUE'") {
+                            option.innerHTML = "Hydrothermal"
+                        }
+                        
+    
+                    selectFilter.appendChild(option);
+                });
+        
+        // adds filter under other components in the top left side of the view
+        view.ui.add(selectFilter, "top-left"); 
+
+        selectFilter.addEventListener('change', function (event) {
+            setFeatureLayerViewFilter(event.target.value); // Client side
+        });
+
+        // Client side filter
+        function setFeatureLayerViewFilter(expression) {
+            view.whenLayerView(featureLayer).then(function(featureLayerView) {
+            featureLayerView.filter = {
+                where: expression
+                };
+            });
+        }
+    });
+    </script>
+
+    <style>
+      html, body, #viewDiv {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+      }
+
+    </style>
+
+  </head>
+
+  <body>
+
+    <div id="viewDiv"></div>
+        <div id="timeSliderDiv"></div>
+        <!-- <div id="infoDiv" class="esri-widget"> -->
+        <div id="legendDiv">
+            <button id="cluster" class="esri-button">Disable Clustering</button>
+        </div>
+  </body>
+</html>
